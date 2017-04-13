@@ -172,6 +172,10 @@ double calR(double len, struct Point left, struct Point right, struct Point chil
 		}
 		r2 = sqrt(1 - 2*dd2 + 2*dd2*dd2) * Cz;
 		// R += r2;
+	} else {
+		struct Point p = calP(len, left, right);
+		p2->x = p.x;
+		p2->y = p.y;
 	}
 	if (DEBUG) {
 		printf("R: l=%.6lf d1=%.6lf d2=%.6f r1=%.6lf r2=%.6f R=%.6lf\n", len, d1, d2, r1, r2, R);
