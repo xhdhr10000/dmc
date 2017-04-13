@@ -95,7 +95,7 @@ void split(int t, int idx) {
 }
 
 double *u, *um, uw = 0;
-struct Point *ump[2];
+struct Point *ump;
 
 int equal(double d1, double d2) {
 	return (fabs(d1 - d2) < 0.0000001);
@@ -105,54 +105,37 @@ int equal(struct Point p1, struct Point p2) {
 	return (equal(p1.x, p2.x) && equal(p1.y, p2.y));
 }
 
-double calR(struct Point left, struct Point right, struct Point child1, struct Point *child2, int level, 
-	double x, double y, double a1, double a2, double c1, double c2,
-	double sinTheta1_1, double sinTheta1_2, double sinTheta2_1, double sinTheta2_2) {
-	struct Point p1, p2;
-	if (equal(y, MAXINT)) {
-		p1.x = x;
-		if (p1.x < child1.x)
-			p1.y = (child1.y-left.y)/(child1.x-left.x)*x + (child1.x*left.y - left.x*child1.y)/(child1.x - left.x);
-		else
-			p1.y = (right.y-child1.y)/(right.x-child1.x)*x + (right.y*child1.x - child1.y*right.x)/(child1.x - right.x);
-		if (child2 != NULL) {
-			p2.x = x;
-			if (p2.x < child2->x)
-				p2.y = (child2->y-left.y)/(child2->x-left.x)*x + (child2->x*left.y - left.x*child2->y)/(child2->x - left.x);
-			else
-				p2.y = (right.y-child2->y)/(right.x-child2->x)*x + (right.y*child2->x - child2->y*right.x)/(child2->x - right.x);
-		}
+double calR(double len, struct Point left, struct Point right, struct Point child1, struct Point *child2,
+	double a1, double a2, double c1, double c2,
+	double sinTheta1_1, double sinTheta1_2, double sinTheta2_1, double sinTheta2_2,
+	double cosTheta1_1, double cosTheta1_2, double cosTheta2_1, double cosTheta2_2) {
+	double R = 0, d1, dd1, d2, dd2, r1, r2 = 0;
+	if (len / cosTheta1_1 < l(left, child1)) {
+		d1 = len / cosTheta1_1;
+		dd1 = d1 / a1;
+		R += d1 * sinTheta1_1;
 	} else {
-		p1.y = y;
-		if (p1.y < child1.y)
-			p1.x = (y - (child1.x*left.y - left.x*child1.y)/(child1.x - left.x)) / ((child1.y-left.y)/(child1.x-left.x));
-		else
-			p1.x = (y - (right.y*child1.x - child1.y*right.x)/(child1.x - right.x)) / ((right.y-child1.y)/(right.x-child1.x));
-		if (child2 != NULL) {
-			p2.y = y;
-			if (p2.y < child2->y)
-				p2.x = (y - (child2->x*left.y - left.x*child2->y)/(child2->x - left.x)) / ((child2->y-left.y)/(child2->x-left.x));
-			else
-				p2.x = (y - (right.y*child2->x - child2->y*right.x)/(child2->x - right.x)) / ((right.y-child2->y)/(right.x-child2->x));
+		d1 = (l(left, right)-len) / cosTheta1_2;
+		dd1 = d1 / c1;
+		R += d1 * sinTheta1_2;
+	}
+	r1 = sqrt(1 - 2*dd1 + 2*dd1*dd1) * Cz;
+	R += r1;
+	if (child2 != NULL) {
+		if (len / cosTheta2_1 < l(left, *child2)) {
+			d2 = len / cosTheta2_1;
+			dd2 = d2 / a2;
+			R += d2 * sinTheta2_1;
+		} else {
+			d2 = (l(left, right)-len) / cosTheta2_2;
+			dd2 = d2 / c2;
+			R += d2 * sinTheta2_2;
 		}
+		r2 = sqrt(1 - 2*dd2 + 2*dd2*dd2) * Cz;
+		R += r2;
 	}
+	if (DEBUG) printf("R: l=%.6lf d1=%.6lf d2=%.6f r1=%.6lf r2=%.6f R=%.6lf\n", len, d1, d2, r1, r2, R);
 
-	double d1 = (p1.x < child1.x) ? l(p1, left) : l(p1, right);
-	double d2 = (child2 != NULL) ? ((p1.x < child2->x) ? l(p2, left) : l(p2, right)) : 0;
-	double dd1 = (p1.x < child1.x) ? d1/a1 : d1/c1;
-	double dd2 = (child2 != NULL) ? ((p2.x < child2->x) ? d2/a2 : d2/c2) : 0;
-	double r1 = sqrt(1 - 2*dd1 + 2*dd1*dd1) * Cz;
-	double r2 = (child2 != NULL) ? sqrt(1 - 2*dd2 + 2*dd2*dd2) * Cz : 0;
-	double R = ((p1.x < child1.x) ? d1*sinTheta1_1 : d1*sinTheta1_2)
-	+ ((child2 != NULL) ? ((p2.x < child2->x) ? d2*sinTheta2_1 : d2*sinTheta2_2) : 0)
-	+ r1 + r2;
-
-	if (R > um[level]) {
-		um[level] = R;
-		ump[0][level] = p1;
-		ump[1][level] = p2;
-	}
-	if (DEBUG) printf("R: x=%.6lf d1=%.6lf d2=%.6f r1=%.6lf r2=%.6f R=%.6lf\n", x, d1, d2, r1, r2, R);
 	return R;
 }
 
@@ -184,20 +167,67 @@ double calU(struct Point left, struct Point right, struct Point child1, struct P
 
 	double sumR = 0;
 	int count = 0;
+	double len = 0;
+	struct Point p;
+	p.x = left.x;
+	p.y = left.y;
 	if (equal(left.x, right.x)) {
 		/* perpendicular to x-axis */
-		for (double y=left.y; y<right.y; y+=n) {
-			double R = calR(left, right, child1, child2, level, MAXINT, y, a1, a2, c1, c2, 
-				sinTheta1_1, sinTheta1_2, sinTheta2_1, sinTheta2_2);
+		p.x = left.x;
+		p.y = left.y;
+		while (p.y < right.y) {
+			len += n;
+			p.y += n;
+			double R = calR(len, left, right, child1, child2, a1, a2, c1, c2,
+				sinTheta1_1, sinTheta1_2, sinTheta2_1, sinTheta2_2,
+				cosTheta1_1, cosTheta1_2, cosTheta2_1, cosTheta2_2);
 			sumR += R;
 			count++;
+
+			if (R > um[level]) {
+				um[level] = R;
+				ump[level] = p;
+			}
 		}
 	} else {
-		for (double x=left.x; x<right.x; x+=n) {
-			double R = calR(left, right, child1, child2, level, x, MAXINT, a1, a2, c1, c2,
-				sinTheta1_1, sinTheta1_2, sinTheta2_1, sinTheta2_2);
-			sumR += R;
-			count++;
+		double k = (right.y - left.y) / (right.x - left.x);
+		if (equal(k, 0)) {
+			/* perpendicular to y-axis */
+			while (p.x < right.x) {
+				len += n;
+				p.x += n;
+				double R = calR(len, left, right, child1, child2, a1, a2, c1, c2,
+					sinTheta1_1, sinTheta1_2, sinTheta2_1, sinTheta2_2,
+					cosTheta1_1, cosTheta1_2, cosTheta2_1, cosTheta2_2);
+				sumR += R;
+				count++;
+
+				if (R > um[level]) {
+					um[level] = R;
+					ump[level] = p;
+				}
+			}
+		} else {
+			double b = left.y - k*left.x;
+			double x0 = (right.x*left.y - left.x*right.y) / (left.y - right.y);
+			double sinAlpha = sin(atan(k));
+			if (DEBUG) printf("k=%lf sinAlpha=%lf\n", k, sinAlpha);
+			while (p.x < right.x) {
+				len += n;
+				p.y += n * sinAlpha;
+				p.x = (p.y - b) / k;
+
+				double R = calR(len, left, right, child1, child2, a1, a2, c1, c2,
+					sinTheta1_1, sinTheta1_2, sinTheta2_1, sinTheta2_2,
+					cosTheta1_1, cosTheta1_2, cosTheta2_1, cosTheta2_2);
+				sumR += R;
+				count++;
+
+				if (R > um[level]) {
+					um[level] = R;
+					ump[level] = p;
+				}
+			}
 		}
 	}
 	return sumR / count;
@@ -309,8 +339,7 @@ int main(int argc, char **argv) {
 	int len = MAX(tree[0][ct[0]-1].level, tree[1][ct[1]-1].level) + 1;
 	u = (double*) malloc(len * sizeof(double));
 	um = (double*) malloc(len * sizeof(double));
-	ump[0] = (struct Point*) malloc(len * sizeof(struct Point));
-	ump[1] = (struct Point*) malloc(len * sizeof(struct Point));
+	ump = (struct Point*) malloc(len * sizeof(struct Point));
 	memset(u, 0, len * sizeof(double));
 	memset(um, 0, len * sizeof(double));
 	qualityAssessment(tree[0][0], tree[1][0]);
@@ -319,7 +348,7 @@ int main(int argc, char **argv) {
 	for (int i=0; i<=tree[0][ct[0]-1].level; i++) {
 		if (u[i] != 0) {
 			printf("level=%d U=%.6lf Umax=%.6lf Umax at:\n", i, u[i], um[i]);
-			printf("\tp1(%.6lf %.6lf) p2(%.6lf %.6lf)\n", ump[0][i].x, ump[0][i].y, ump[1][i].x, ump[1][i].y);
+			printf("\tp(%.6lf %.6lf)\n", ump[i].x, ump[i].y);
 		}
 	}
 	printf("AU(Curve)=%.6f\n", uw);
