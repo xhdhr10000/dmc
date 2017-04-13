@@ -124,7 +124,7 @@ struct Point calP(double len, struct Point left, struct Point right) {
 	double sinAlpha = sin(atan(k));
 	if (DEBUG) printf("k=%lf sinAlpha=%lf left(%lf, %lf) right(%lf, %lf)\n", k, sinAlpha, left.x, left.y, right.x, right.y);
 
-	p.y += len * sinAlpha;
+	p.y = left.y + len * sinAlpha;
 	p.x = (p.y - b) / k;
 
 	return p;
