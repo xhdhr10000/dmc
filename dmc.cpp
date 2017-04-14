@@ -39,12 +39,20 @@ double l(struct Point s, struct Point e) {
 	return sqrt((s.x-e.x)*(s.x-e.x) + (s.y-e.y)*(s.y-e.y));
 }
 
+int equal(double d1, double d2) {
+	return (fabs(d1 - d2) < 0.0000001);
+}
+
+int equal(struct Point p1, struct Point p2) {
+	return (equal(p1.x, p2.x) && equal(p1.y, p2.y));
+}
+
 double d(struct Point s, struct Point e, struct Point c) {
 	double lCurve  = l(c, s);
 	double rCurve  = l(c, e);
 	double seCurve = l(s, e);
 	double cosTheta = (lCurve*lCurve + seCurve*seCurve - rCurve*rCurve) / (2*lCurve*seCurve);
-	double d = lCurve * ((1-cosTheta > 0.0000001) ? sqrt(1-cosTheta*cosTheta) : 1);
+	double d = lCurve * sqrt(1-cosTheta*cosTheta);
 	if (DEBUG) {
 		printf("s(%.6lf %.6lf) e(%.6lf %.6lf) c(%.6lf %.6lf)\n", s.x, s.y, e.x, e.y, c.x, c.y);
 		printf("lCurve=%.6lf rCurve=%.6lf seCurve=%.6lf cosTheta=%.6lf d=%.6lf\n", lCurve, rCurve, seCurve, cosTheta, d);
@@ -96,14 +104,6 @@ void split(int t, int idx) {
 
 double *u, *um, uw = 0;
 struct Point *ump[2];
-
-int equal(double d1, double d2) {
-	return (fabs(d1 - d2) < 0.0000001);
-}
-
-int equal(struct Point p1, struct Point p2) {
-	return (equal(p1.x, p2.x) && equal(p1.y, p2.y));
-}
 
 struct Point calP(double len, struct Point left, struct Point right) {
 	Point p;
