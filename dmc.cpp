@@ -127,22 +127,23 @@ struct Point calP(double len, struct Point left, struct Point right) {
 	double k = (right.y - left.y) / (right.x - left.x);
 	double b = left.y - k*left.x;
 	double x0 = (right.x*left.y - left.x*right.y) / (left.y - right.y);
-	double sinAlpha = sin(atan(k));
+	double sinAlpha = sin(atan(k)), cosAlpha = cos(atan(k));
 	if (DEBUG) printf("k=%lf sinAlpha=%lf left(%lf, %lf) right(%lf, %lf)\n", k, sinAlpha, left.x, left.y, right.x, right.y);
 
-	p.y = left.y + len * sinAlpha;
-	p.x = (p.y - b) / k;
+	p.y = left.y + fabs(len * sinAlpha) * (left.y < right.y? 1: -1);
+	p.x = left.x + fabs(len * cosAlpha) * (left.x < right.x? 1: -1);
 
 	return p;
 }
 
-double calR(double len, struct Point left, struct Point right, struct Point *child1, struct Point *child2,
-	double a1, double a2, double c1, double c2,
+double calR(int level, double len, struct Point left, struct Point right,
+	struct Point *child1, struct Point *child2, double a1, double a2, double c1, double c2,
 	double sinTheta1_1, double sinTheta1_2, double sinTheta2_1, double sinTheta2_2,
-	double cosTheta1_1, double cosTheta1_2, double cosTheta2_1, double cosTheta2_2,
-	struct Point *p1, struct Point *p2) {
+	double cosTheta1_1, double cosTheta1_2, double cosTheta2_1, double cosTheta2_2) {
 
+	struct Point p1, p2;
 	double R=0, d1=0, dd1=0, d2=0, dd2=0, r1=0, r2=0;
+
 	if (child1 == NULL && child2 == NULL) {
 		/* case 1 */
 		dd1 = len / length(left, right);
@@ -151,57 +152,122 @@ double calR(double len, struct Point left, struct Point right, struct Point *chi
 	} else {
 		/* case 2 */
 		if (child1 != NULL) {
-			if (len / cosTheta1_1 < length(left, *child1)) {
+			if (len / cosTheta1_1 < a1) {
 				d1 = len / cosTheta1_1;
 				dd1 = d1 / a1;
 				R += d1 * sinTheta1_1;
 				struct Point p = calP(d1, left, *child1);
-				p1->x = p.x;
-				p1->y = p.y;
+				p1.x = p.x;
+				p1.y = p.y;
 			} else {
 				d1 = (length(left, right)-len) / cosTheta1_2;
 				dd1 = d1 / c1;
 				R += d1 * sinTheta1_2;
-				struct Point p = calP(length(*child1, right) - d1, *child1, right);
-				p1->x = p.x;
-				p1->y = p.y;
+				struct Point p = calP(c1 - d1, *child1, right);
+				p1.x = p.x;
+				p1.y = p.y;
 			}
 			r1 = sqrt(1 - 2*dd1 + 2*dd1*dd1) * Cz;
 			R += r1;
 		} else {
 			struct Point p = calP(len, left, right);
-			p1->x = p.x;
-			p1->y = p.y;
+			p1.x = p.x;
+			p1.y = p.y;
 		}
 		if (child2 != NULL) {
-			if (len / cosTheta2_1 < length(left, *child2)) {
+			if (len / cosTheta2_1 < a2) {
 				d2 = len / cosTheta2_1;
 				dd2 = d2 / a2;
 				R += d2 * sinTheta2_1;
 				struct Point p = calP(d2, left, *child2);
-				p2->x = p.x;
-				p2->y = p.y;
+				p2.x = p.x;
+				p2.y = p.y;
 			} else {
 				d2 = (length(left, right)-len) / cosTheta2_2;
 				dd2 = d2 / c2;
 				R += d2 * sinTheta2_2;
-				struct Point p = calP(length(*child2, right) - d2, *child2, right);
-				p2->x = p.x;
-				p2->y = p.y;
+				struct Point p = calP(c2 - d2, *child2, right);
+				p2.x = p.x;
+				p2.y = p.y;
 			}
 			r2 = sqrt(1 - 2*dd2 + 2*dd2*dd2) * Cz;
-		// R += r2;
+			// R += r2;
 		} else {
 			struct Point p = calP(len, left, right);
-			p2->x = p.x;
-			p2->y = p.y;
+			p2.x = p.x;
+			p2.y = p.y;
 		}
 	}
 	if (DEBUG) {
 		printf("R: length=%.6lf d1=%.6lf d2=%.6f r1=%.6lf r2=%.6f R=%.6lf\n", len, d1, d2, r1, r2, R);
-		printf("p1(%lf, %lf) p2(%lf %lf)\n", p1->x, p1->y, p2->x, p2->y);
+		printf("p1(%lf, %lf) p2(%lf %lf)\n", p1.x, p1.y, p2.x, p2.y);
 	}
 
+	if (R > um[level]) {
+		um[level] = R;
+		ump[0][level] = p1;
+		ump[1][level] = p2;
+	}
+	return R;
+}
+
+/* At least one angle is obtuse, i.e. child1 is not NULL */
+double calR_obtuse(int level, double len, struct Point left, struct Point right,
+	struct Point *child1, struct Point *child2, double a1, double a2, double b, double c1, double c2,
+	double sinTheta1_1, double sinTheta1_2, double sinTheta2_1, double sinTheta2_2,
+	double cosTheta1_1, double cosTheta1_2, double cosTheta2_1, double cosTheta2_2) {
+
+	struct Point p1, p2, p;
+	double R=0, d1=0, dd1=0, d2=0, dd2=0, r1=0, r2=0;
+	double ratio = len / (a1 + c1);
+
+	d1 = len;
+	dd1 = (d1 < a1)? d1/a1: (d1-a1)/c1;
+	if (child2 == NULL) {
+		/* case 2.1 */
+		d2 = ratio * b;
+		if (d1 < a1)
+			p = calP(d1, left, *child1);
+		else
+			p = calP(d1-a1, *child1, right);
+		p1.x = p.x;
+		p1.y = p.y;
+		p = calP(d2, left, right);
+		p2.x = p.x;
+		p2.y = p.y;
+
+		R += length(p1, p2);
+	} else {
+		/* case 2.2 */
+		d2 = ratio * (a2 + c2);
+		if (d1 < a1)
+			p = calP(d1, left, *child1);
+		else
+			p = calP(d1-a1, *child1, right);
+		p1.x = p.x;
+		p1.y = p.y;
+		if (d1 < a2)
+			p = calP(d2, left, *child2);
+		else
+			p = calP(d2, *child2, right);
+		p2.x = p.x;
+		p2.y = p.y;
+
+		R += length(p1, p2);
+	}
+	r1 = sqrt(1 - 2*dd1 + 2*dd1*dd1) * Cz;
+	R += r1;
+
+	if (DEBUG) {
+		printf("R: length=%.6lf d1=%.6lf d2=%.6f r1=%.6lf r2=%.6f R=%.6lf\n", len, d1, d2, r1, r2, R);
+		printf("p1(%lf, %lf) p2(%lf %lf)\n", p1.x, p1.y, p2.x, p2.y);
+	}
+
+	if (R > um[level]) {
+		um[level] = R;
+		ump[0][level] = p1;
+		ump[1][level] = p2;
+	}
 	return R;
 }
 
@@ -216,9 +282,6 @@ double calU(struct Point left, struct Point right, struct Point *child1, struct 
 		c1 = length(*child1, right);
 		cosTheta1_1 = cosine(a1, b, c1);
 		cosTheta1_2 = cosine(c1, b, a1);
-		if (cosTheta1_1 < 0 || cosTheta1_2 < 0)
-			/* fixme: error, obtuse angle */
-			return -1;
 		sinTheta1_1 = sin(acos(cosTheta1_1));
 		sinTheta1_2 = sin(acos(cosTheta1_2));
 	}
@@ -227,9 +290,6 @@ double calU(struct Point left, struct Point right, struct Point *child1, struct 
 		c2 = length(*child2, right);
 		cosTheta2_1 = cosine(a2, b, c2);
 		cosTheta2_2 = cosine(c2, b, a2);
-		if (cosTheta2_1 < 0 || cosTheta2_2 < 0)
-			/* fixme: error, obtuse angle */
-			return -1;
 		sinTheta2_1 = sin(acos(cosTheta2_1));
 		sinTheta2_2 = sin(acos(cosTheta2_2));
 	}
@@ -247,63 +307,57 @@ double calU(struct Point left, struct Point right, struct Point *child1, struct 
 	double sumR = 0;
 	int count = 0;
 	double len = 0;
-	struct Point p, p1, p2;
+	struct Point p;
 	p.x = left.x;
 	p.y = left.y;
-	if (equal(left.x, right.x)) {
-		/* perpendicular to x-axis */
-		while (p.y < right.y) {
+	if (cosTheta1_1 < 0 || cosTheta1_2 < 0 || cosTheta2_1 < 0 || cosTheta2_2 < 0) {
+		/* obtuse angle (child1 is not NULL) */
+		double lenTotal = a1 + c1;
+		while (len < lenTotal) {
 			len += n;
-			p.y += n;
-			double R = calR(len, left, right, child1, child2, a1, a2, c1, c2,
+			if (len < a1)
+				p = calP(len, left, *child1);
+			else
+				p = calP(len-a1, *child1, right);
+			sumR += calR_obtuse(level, len, left, right, child1, child2, a1, a2, b, c1, c2,
 				sinTheta1_1, sinTheta1_2, sinTheta2_1, sinTheta2_2,
-				cosTheta1_1, cosTheta1_2, cosTheta2_1, cosTheta2_2, &p1, &p2);
-			sumR += R;
+				cosTheta1_1, cosTheta1_2, cosTheta2_1, cosTheta2_2);
 			count++;
-
-			if (R > um[level]) {
-				um[level] = R;
-				ump[0][level] = p1;
-				ump[1][level] = p2;
-			}
 		}
 	} else {
-		if (equal(left.y, right.y)) {
+		if (equal(left.x, right.x)) {
+			/* perpendicular to x-axis */
+			while (p.y < right.y) {
+				len += n;
+				p.y += n;
+				sumR += calR(level, len, left, right, child1, child2, a1, a2, c1, c2,
+					sinTheta1_1, sinTheta1_2, sinTheta2_1, sinTheta2_2,
+					cosTheta1_1, cosTheta1_2, cosTheta2_1, cosTheta2_2);
+				count++;
+			}
+		} else if (equal(left.y, right.y)) {
 			/* perpendicular to y-axis */
 			while (p.x < right.x) {
 				len += n;
 				p.x += n;
-				double R = calR(len, left, right, child1, child2, a1, a2, c1, c2,
+				sumR += calR(level, len, left, right, child1, child2, a1, a2, c1, c2,
 					sinTheta1_1, sinTheta1_2, sinTheta2_1, sinTheta2_2,
-					cosTheta1_1, cosTheta1_2, cosTheta2_1, cosTheta2_2, &p1, &p2);
-				sumR += R;
+					cosTheta1_1, cosTheta1_2, cosTheta2_1, cosTheta2_2);
 				count++;
-
-				if (R > um[level]) {
-					um[level] = R;
-					ump[0][level] = p1;
-					ump[1][level] = p2;
-				}
 			}
 		} else {
 			while (p.x < right.x) {
 				len += n;
 				p = calP(len, left, right);
 
-				double R = calR(len, left, right, child1, child2, a1, a2, c1, c2,
+				sumR += calR(level, len, left, right, child1, child2, a1, a2, c1, c2,
 					sinTheta1_1, sinTheta1_2, sinTheta2_1, sinTheta2_2,
-					cosTheta1_1, cosTheta1_2, cosTheta2_1, cosTheta2_2, &p1, &p2);
-				sumR += R;
+					cosTheta1_1, cosTheta1_2, cosTheta2_1, cosTheta2_2);
 				count++;
-
-				if (R > um[level]) {
-					um[level] = R;
-					ump[0][level] = p1;
-					ump[1][level] = p2;
-				}
 			}
 		}
 	}
+
 	return sumR / count;
 }
 
